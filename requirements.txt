@@ -1,0 +1,33 @@
+# ============================================================
+# Incident Response Playbook Recommendation System
+# Requirements
+# ============================================================
+
+# --- Core NLP & Feature Extraction ---
+spacy>=3.7.0
+spacy-transformers>=1.3.0
+
+# --- RDF / Knowledge Graph ---
+rdflib>=7.0.0
+
+# --- Machine Learning & Deep Learning ---
+torch>=2.2.0
+torchmetrics>=1.3.0
+scikit-learn>=1.4.0
+
+# --- Data Processing ---
+pandas>=2.2.0
+numpy>=1.26.0
+imbalanced-learn>=0.12.0    # SMOTE
+
+# --- Evaluation & Metrics ---
+scipy>=1.12.0
+
+# --- Visualization ---
+matplotlib>=3.8.0
+seaborn>=0.13.0
+
+# --- Utilities ---
+tqdm>=4.66.0
+colorlog>=6.8.0
+python-dotenv>=1.0.0

@@ -1,0 +1,79 @@
+2026-05-16 22:40:22,535 [INFO] MainPipeline — Evaluation-only mode.
+2026-05-16 22:40:22,537 [INFO] MainPipeline —   INCIDENT RESPONSE PLAYBOOK RECOMMENDATION SYSTEM
+2026-05-16 22:40:22,537 [INFO] MainPipeline —   End-to-End Demo Pipeline
+2026-05-16 22:40:22,540 [INFO] MainPipeline —   STEP 2.1 — Feature Extraction & Knowledge Graph
+2026-05-16 22:40:22,541 [INFO] src.feature_extraction.ner_extractor — Memuat spaCy model: en_core_web_sm
+2026-05-16 22:40:28,305 [INFO] src.feature_extraction.knowledge_graph — MITRE ATT&CK loaded: 835 techniques, 14 tactics
+2026-05-16 22:40:28,340 [INFO] MainPipeline — 
+  Text: Lazarus Group (APT38) deployed Cobalt Strike beacons from 192.168.10.5 targeting...
+2026-05-16 22:40:28,340 [INFO] MainPipeline —   Entities: {'ACTOR': ['Lazarus Group', 'APT38'], 'IP_ADDRESS': ['192.168.10.5'], 'CVE': ['CVE-2021-44228'], 'MD5_HASH': ['44d88612fea8a8f36de82e1278abb02f'], 'DOMAIN': ['evil-domain.ru'], 'MITRE_TECHNIQUE': ['T1059.001'], 'MALWARE': ['ransomware', 'Ryuk', 'Cobalt Strike']}
+2026-05-16 22:40:28,340 [INFO] MainPipeline —   Triplets generated: 25
+2026-05-16 22:40:28,349 [INFO] MainPipeline — 
+  Text: Port scan activity detected from 10.10.10.100 against internal subnet. T1046 (Ne...
+2026-05-16 22:40:28,350 [INFO] MainPipeline —   Entities: {'TOOL': ['Discovery'], 'IP_ADDRESS': ['10.10.10.100'], 'MITRE_TECHNIQUE': ['T1046'], 'TACTIC': ['Discovery']}
+2026-05-16 22:40:28,350 [INFO] MainPipeline —   Triplets generated: 0
+2026-05-16 22:40:28,358 [INFO] MainPipeline — 
+  Text: SQL injection attempt on web application from 203.0.113.42. CVE-2021-27101 explo...
+2026-05-16 22:40:28,358 [INFO] MainPipeline —   Entities: {'IP_ADDRESS': ['203.0.113.42'], 'CVE': ['CVE-2021-27101'], 'MITRE_TECHNIQUE': ['T1190']}
+2026-05-16 22:40:28,359 [INFO] MainPipeline —   Triplets generated: 1
+2026-05-16 22:40:28,369 [INFO] MainPipeline — 
+  Text: DDoS attack detected. 150,000 packets/sec from botnet. T1499 (Endpoint Denial of...
+2026-05-16 22:40:28,369 [INFO] MainPipeline —   Entities: {'MITRE_TECHNIQUE': ['T1499'], 'MALWARE': ['botnet'], 'TACTIC': ['impact']}
+2026-05-16 22:40:28,369 [INFO] MainPipeline —   Triplets generated: 2
+2026-05-16 22:40:28,377 [INFO] MainPipeline — 
+  Text: Emotet trojan dropper with SHA256 a3b1c2d4e5f67890123456789012345678901234567890...
+2026-05-16 22:40:28,378 [INFO] MainPipeline —   Entities: {'MITRE_TECHNIQUE': ['T1021', 'T1003'], 'MALWARE': ['dropper', 'trojan', 'Emotet'], 'TACTIC': ['Credential access', 'lateral movement']}
+2026-05-16 22:40:28,378 [INFO] MainPipeline —   Triplets generated: 12
+2026-05-16 22:40:28,378 [INFO] MainPipeline — 
+  Knowledge Graph Summary: {'total_triplets': 40, 'rdf_triples': 80, 'predicate_distribution': {'uses': 6, 'exploits': 3, 'communicatesWith': 6, 'implements': 10, 'partOf': 10, 'enables': 2, 'hasHash': 3}, 'unique_subjects': 15, 'unique_objects': 16}
+2026-05-16 22:40:28,382 [INFO] MainPipeline —   STEP 2.2 — Automated Triage (TF-IDF Filter)
+2026-05-16 22:40:28,384 [INFO] src.triage.tfidf_filter — [Triage Batch] N=15 | noise=0 | high-risk=15
+2026-05-16 22:40:28,399 [INFO] MainPipeline — 
+  Triage Stats: {'total_processed': 0, 'noise_eliminated': 0, 'high_risk_forwarded': 15, 'batches_evaluated': 1}
+2026-05-16 22:40:28,400 [INFO] MainPipeline — 
+  15/15 alerts lolos ke DIM pipeline
+2026-05-16 22:40:28,400 [INFO] MainPipeline —   STEP 2.3+2.4 — DIM Inference & HITL Validation
+2026-05-16 22:40:28,409 [INFO] src.models.dim — DIM initialized | params=463,425
+2026-05-16 22:41:39,001 [INFO] MainPipeline - 
+============================================================
+2026-05-16 22:41:39,001 [INFO] MainPipeline -   FULL EVALUATION -- Best Checkpoint
+2026-05-16 22:41:39,001 [INFO] MainPipeline - ============================================================
+2026-05-16 22:41:39,010 [INFO] src.models.dim - DIM initialized | params=463,425
+2026-05-16 22:42:12,392 [INFO] MainPipeline - 
+============================================================
+2026-05-16 22:42:12,393 [INFO] MainPipeline -   FULL EVALUATION -- Best Checkpoint
+2026-05-16 22:42:12,393 [INFO] MainPipeline - ============================================================
+2026-05-16 22:42:12,413 [INFO] src.models.dim - DIM initialized | params=463,425
+2026-05-16 22:42:12,418 [INFO] MainPipeline -   Checkpoint: dim_best.pt (epoch=19, NDCG@5=0.8835)
+2026-05-16 22:42:12,418 [INFO] MainPipeline -   Config    : max_seq_len=20, embed_dim=64
+2026-05-16 22:42:12,421 [INFO] MainPipeline -   Loading Splunk BOTS test set ...
+2026-05-16 22:42:12,426 [INFO] src.data.dataset_loader - Splunk BOTS: Generating 10000 synthetic sequences (seq_len=20)
+2026-05-16 22:42:13,101 [INFO] MainPipeline -   Test set: 2000 sequences
+2026-05-16 22:42:23,609 [INFO] MainPipeline - 
+============================================================
+2026-05-16 22:42:23,609 [INFO] MainPipeline -   RANKING METRICS (Best Checkpoint)
+2026-05-16 22:42:23,609 [INFO] MainPipeline -   Dataset : Splunk BOTS v3 (synthetic sequences)
+2026-05-16 22:42:23,610 [INFO] MainPipeline -   Samples : 2000 test queries | 21 playbook candidates
+2026-05-16 22:42:23,610 [INFO] MainPipeline -   --------------------------------------------------------
+2026-05-16 22:42:23,611 [INFO] MainPipeline -      K |  Hit Ratio |        MAP |       NDCG
+2026-05-16 22:42:23,611 [INFO] MainPipeline -   --------------------------------------------------------
+2026-05-16 22:42:23,611 [INFO] MainPipeline -      1 |     0.8545 |     0.8545 |     0.8545
+2026-05-16 22:42:23,611 [INFO] MainPipeline -      3 |     0.8955 |     0.8730 |     0.8788
+2026-05-16 22:42:23,611 [INFO] MainPipeline -      5 |     0.9070 |     0.8756 |     0.8835
+2026-05-16 22:42:23,611 [INFO] MainPipeline -     10 |     0.9395 |     0.8798 |     0.8939
+2026-05-16 22:42:23,611 [INFO] MainPipeline -   ========================================================
+2026-05-16 22:42:23,611 [INFO] MainPipeline - 
+  SOC OPERATIONAL METRICS (simulated)
+2026-05-16 22:42:23,612 [INFO] MainPipeline -   --------------------------------------------------------
+2026-05-16 22:42:23,613 [INFO] MainPipeline -   MTTD mean              : 1.60s  (std=1.54)
+2026-05-16 22:42:23,613 [INFO] MainPipeline -   MTTR mean              : 18.05s  (std=16.91)
+2026-05-16 22:42:23,613 [INFO] MainPipeline -   Workload Reduction mean: 67.0%
+2026-05-16 22:42:23,614 [INFO] MainPipeline -   ========================================================
+2026-05-16 22:42:23,614 [INFO] MainPipeline - 
+  UNSW-NB15 / CICIDS2017 Classification Metrics
+2026-05-16 22:42:23,614 [INFO] MainPipeline -   (Run test_modules.py untuk hasil klasifikasi lengkap)
+2026-05-16 22:42:23,614 [INFO] MainPipeline - 
+============================================================
+2026-05-16 22:42:23,614 [INFO] MainPipeline -   Evaluasi selesai. Detail di logs/pipeline.log
+2026-05-16 22:42:23,614 [INFO] MainPipeline - ============================================================
+
