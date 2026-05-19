@@ -383,32 +383,95 @@ class SplunkBOTSLoader:
     Loader untuk dataset Splunk BOTS v3.
     Digunakan untuk: pelatihan DIM (sekuensi playbook historis).
 
-    Dataset BOTS disimpan dalam format Splunk lookups + eventcode CSV.
-    Karena tidak memiliki label respons mitigasi secara inheren,
-    dilakukan anotasi sistematis ke kelas playbook berdasarkan event type.
+    =========================================================================
+    CATATAN PENTING — Synthetic Sequence Generation
+    =========================================================================
+    Dataset Splunk BOTS v3 disimpan dalam format Splunk lookups (eventcode.csv
+    dan sejenisnya), bukan structured log yang langsung bisa dijadikan urutan
+    sekuensi untuk melatih arsitektur Transformer/LSTM.
+
+    Karena data mentah SIEM (BOTS) tidak secara inheren memiliki label respons
+    mitigasi, sistem melakukan dua tahap anotasi sistematis:
+
+    Tahap 1 — Anotasi Eventcode → Playbook:
+        Setiap Windows Event Code (dari lookup eventcode.csv) dipetakan ke
+        kelas playbook respons berdasarkan semantik keamanan siber.
+        Contoh: EventCode 4625 (Failed Logon) → "Brute Force Response".
+        Mapping ini tersimpan di EVENTCODE_TO_PLAYBOOK.
+
+    Tahap 2 — Generasi Sekuensi Sintetis:
+        Distribusi eventcode dari BOTS (frekuensi relatif tiap event) digunakan
+        sebagai prior untuk men-generate sekuensi historis playbook sintetis.
+        Setiap sekuensi merepresentasikan satu sesi respons insiden:
+          • Playbook dominan dipilih berdasarkan distribusi BOTS
+          • 70% langkah historis menggunakan playbook dominan (konsistensi kampanye)
+          • 30% variasi acak (simulasi noise operasional SOC)
+
+    Transparansi Evaluasi:
+        Evaluasi DIM menggunakan synthetic sequences yang DITURUNKAN DARI distribusi
+        BOTS, bukan raw log BOTS secara langsung. Hal ini konsisten dengan
+        methodology yang menyatakan: "peringatan dari Splunk BOTS dianotasi dan
+        dipetakan secara sistematis ke dalam kelas-kelas playbook respons yang relevan."
+
+    Gunakan method describe() untuk mendapatkan ringkasan lengkap provenance data.
+    =========================================================================
     """
 
     LOOKUPS_DIR = DATASETS_DIR / "Splunk BOTS v3" / "botsv3_data_set" / "lookups"
 
     # Mapping eventcode → playbook berdasarkan anotasi sistematis
+    # Sumber: Windows Security Event Log semantics + MITRE ATT&CK mapping
     EVENTCODE_TO_PLAYBOOK = {
-        "4624": "Credential Compromise Response",  # Successful logon
-        "4625": "Brute Force Response",            # Failed logon
-        "4648": "Lateral Movement Containment",    # Logon with explicit credentials
-        "4688": "Malware Containment & Eradication",  # New process created
-        "4698": "Persistence",                     # Scheduled task created
-        "4720": "Privilege Escalation Response",   # User account created
-        "4732": "Privilege Escalation Response",   # User added to privileged group
-        "7045": "Malware Containment & Eradication",  # New service installed
-        "4697": "Malware Containment & Eradication",  # Service installed
-        "4663": "Data Exfiltration Response",      # File access attempt
-        "4657": "Insider Threat Investigation",    # Registry value modified
-        "4672": "Privilege Escalation Response",   # Special privileges assigned
+        "4624": "Credential Compromise Response",    # Successful logon
+        "4625": "Brute Force Response",              # Failed logon
+        "4648": "Lateral Movement Containment",      # Logon with explicit credentials
+        "4688": "Malware Containment & Eradication", # New process created
+        "4698": "Malware Containment & Eradication", # Scheduled task created (persistence)
+        "4720": "Privilege Escalation Response",     # User account created
+        "4732": "Privilege Escalation Response",     # User added to privileged group
+        "7045": "Malware Containment & Eradication", # New service installed
+        "4697": "Malware Containment & Eradication", # Service installed
+        "4663": "Data Exfiltration Response",        # File access attempt
+        "4657": "Insider Threat Investigation",      # Registry value modified
+        "4672": "Privilege Escalation Response",     # Special privileges assigned
     }
 
     def __init__(self, seq_len: int = 20, random_state: int = 42):
         self.seq_len      = seq_len
         self.random_state = random_state
+        self._generation_metadata: Dict = {}   # diisi saat load() dipanggil
+
+    def describe(self) -> Dict:
+        """
+        Kembalikan ringkasan provenance data yang dihasilkan.
+
+        Berguna untuk transparansi dalam laporan evaluasi: menjelaskan
+        bahwa DIM dilatih dari synthetic sequences yang diturunkan dari
+        distribusi BOTS, bukan raw BOTS log secara langsung.
+
+        Returns:
+            Dict berisi informasi sumber data, metode generasi, dan statistik.
+        """
+        base = {
+            "dataset": "Splunk BOTS v3",
+            "dataset_type": "SYNTHETIC_SEQUENCES_DERIVED_FROM_BOTS",
+            "generation_method": (
+                "Synthetic playbook sequences generated from Splunk BOTS v3 "
+                "eventcode distribution. Each sequence represents one simulated "
+                "SOC incident response session."
+            ),
+            "annotation_note": (
+                "Raw BOTS data does not inherently contain mitigation response labels. "
+                "Windows Event Codes are systematically annotated to playbook classes "
+                "via EVENTCODE_TO_PLAYBOOK mapping before sequence generation."
+            ),
+            "eventcode_to_playbook": self.EVENTCODE_TO_PLAYBOOK,
+            "seq_len": self.seq_len,
+            "lookups_dir": str(self.LOOKUPS_DIR),
+            "eventcode_file_exists": (self.LOOKUPS_DIR / "eventcode.csv").exists(),
+        }
+        base.update(self._generation_metadata)
+        return base
 
     def load(
         self,
@@ -418,60 +481,112 @@ class SplunkBOTSLoader:
         """
         Load BOTS dataset untuk pelatihan DIM.
 
-        Karena data BOTS dalam format Splunk lookup (bukan structured log),
-        sistem menghasilkan sekuensi sintetis yang merepresentasikan pola
-        playbook historis berdasarkan distribusi eventcode.
+        Proses:
+        1. Baca distribusi eventcode dari BOTS lookups/eventcode.csv
+           (jika file tidak ada, gunakan distribusi uniform sebagai fallback).
+        2. Petakan eventcode → kelas playbook via EVENTCODE_TO_PLAYBOOK.
+        3. Generate n_synthetic sekuensi historis playbook sintetis
+           berdasarkan distribusi tersebut.
+        4. Split train/test dan pad ke max_seq_len.
+
+        CATATAN: Returned dict menyertakan kunci 'generation_info' yang berisi
+        metadata provenance untuk transparansi evaluasi. Gunakan juga
+        method describe() untuk ringkasan lengkap.
+
+        Args:
+            test_size:   Proporsi data uji (default 0.2).
+            n_synthetic: Jumlah sekuensi sintetis yang di-generate (default 5000).
 
         Returns:
-            train_data, test_data (dict of tensors)
+            train_data, test_data (dict of tensors + generation_info)
         """
+        logger.info("=" * 60)
+        logger.info("  Splunk BOTS v3 — Sequence Generation for DIM Training")
+        logger.info("=" * 60)
+        logger.info("  NOTE: DIM dilatih dari SYNTHETIC SEQUENCES yang diturunkan")
+        logger.info("  dari distribusi eventcode Splunk BOTS v3, bukan raw log.")
+        logger.info("  Eventcode dianotasi sistematis ke kelas playbook respons.")
+        logger.info("  Gunakan loader.describe() untuk detail provenance lengkap.")
+        logger.info("-" * 60)
+
         eventcode_file = self.LOOKUPS_DIR / "eventcode.csv"
-        playbook_dist  = self._load_eventcode_distribution(eventcode_file)
+        playbook_dist, dist_source = self._load_eventcode_distribution(eventcode_file)
 
         logger.info(
-            f"Splunk BOTS: Generating {n_synthetic} synthetic sequences "
-            f"(seq_len={self.seq_len})"
+            f"  Eventcode distribution source : {dist_source}\n"
+            f"  Sequences to generate         : {n_synthetic}\n"
+            f"  Sequence length (max)         : {self.seq_len}\n"
+            f"  Mapped playbook classes       : "
+            f"{len(set(self.EVENTCODE_TO_PLAYBOOK.values()))}"
         )
+        logger.info("=" * 60)
 
         return self._generate_sequences(
             playbook_dist=playbook_dist,
             n_sequences=n_synthetic,
             test_size=test_size,
+            dist_source=dist_source,
         )
 
     def _load_eventcode_distribution(
         self, eventcode_file: Path
-    ) -> Dict[str, float]:
-        """Baca distribusi eventcode dari BOTS lookup file."""
+    ) -> Tuple[Dict[str, float], str]:
+        """
+        Baca distribusi eventcode dari BOTS lookup file.
+
+        Returns:
+            (dist_dict, source_description) — di mana source menjelaskan
+            apakah distribusi berasal dari file BOTS asli atau fallback uniform.
+        """
         if not eventcode_file.exists():
-            logger.warning("eventcode.csv tidak ditemukan. Menggunakan distribusi default.")
-            return {k: 1.0/len(self.EVENTCODE_TO_PLAYBOOK)
+            logger.warning(
+                f"eventcode.csv tidak ditemukan di {self.LOOKUPS_DIR}. "
+                "Menggunakan distribusi uniform sebagai fallback — "
+                "semua playbook class mendapat bobot yang sama."
+            )
+            dist = {k: 1.0 / len(self.EVENTCODE_TO_PLAYBOOK)
                     for k in self.EVENTCODE_TO_PLAYBOOK}
+            return dist, "uniform_fallback (eventcode.csv not found)"
 
         try:
             df = pd.read_csv(eventcode_file)
             df.columns = df.columns.str.strip().str.lower()
-            # Kolom yang mungkin ada: EventCode, Count atau semacamnya
             if "eventcode" in df.columns:
                 dist = df["eventcode"].astype(str).value_counts(normalize=True).to_dict()
-                return dist
+                n_unique = len(dist)
+                logger.info(
+                    f"Eventcode distribution loaded from BOTS: "
+                    f"{n_unique} unique event codes"
+                )
+                return dist, f"bots_eventcode_csv ({n_unique} unique codes)"
         except Exception as e:
             logger.warning(f"Gagal baca eventcode.csv: {e}")
 
-        return {k: 1.0/len(self.EVENTCODE_TO_PLAYBOOK)
+        dist = {k: 1.0 / len(self.EVENTCODE_TO_PLAYBOOK)
                 for k in self.EVENTCODE_TO_PLAYBOOK}
+        return dist, "uniform_fallback (parse error)"
 
     def _generate_sequences(
         self,
         playbook_dist: Dict[str, float],
         n_sequences:   int,
         test_size:     float,
+        dist_source:   str = "unknown",
     ) -> Tuple[Dict, Dict]:
         """
-        Generate sekuensi historis playbook untuk pelatihan DIM.
+        Generate sekuensi historis playbook sintetis untuk pelatihan DIM.
 
-        Setiap sequence merepresentasikan riwayat interaksi analis
-        dengan playbook dalam satu sesi respons insiden.
+        Setiap sequence merepresentasikan satu sesi respons insiden SOC:
+          - Playbook dominan dipilih berdasarkan distribusi eventcode BOTS
+          - 70% langkah historis menggunakan playbook dominan
+            (mensimulasikan konsistensi kampanye serangan APT)
+          - 30% variasi acak (mensimulasikan noise operasional SOC)
+          - Target = playbook dominan sesi tersebut
+
+        Catatan transparansi:
+            Sequence yang dihasilkan adalah SINTETIS — bukan replay raw BOTS log.
+            Distribusi BOTS hanya digunakan sebagai prior probabilistik untuk
+            menentukan frekuensi relatif tiap kelas playbook dalam training data.
         """
         import random
         random.seed(self.random_state)
@@ -481,22 +596,94 @@ class SplunkBOTSLoader:
         alert_type_ids = list(range(1, 51))  # 50 tipe alert
         tactic_ids     = list(range(1, 15))  # 14 MITRE tactics
 
+        # Hitung distribusi playbook dari distribusi eventcode BOTS
+        # (eventcode yang tidak ter-mapping diabaikan)
+        playbook_weights: Dict[int, float] = {}
+        for ec, weight in playbook_dist.items():
+            pb_name = self.EVENTCODE_TO_PLAYBOOK.get(str(ec))
+            if pb_name:
+                pb_id = PLAYBOOK_ID_MAP.get(pb_name, 0)
+                playbook_weights[pb_id] = playbook_weights.get(pb_id, 0) + weight
+
+        # Jika tidak ada eventcode yang ter-mapping, pakai distribusi uniform
+        if not playbook_weights:
+            playbook_weights = {pid: 1.0 for pid in playbook_ids[1:]}
+
+        weighted_pbs  = list(playbook_weights.keys())
+        weighted_vals = list(playbook_weights.values())
+        total_w = sum(weighted_vals)
+        weighted_vals = [w / total_w for w in weighted_vals]  # normalize
+
         all_data = []
         for _ in range(n_sequences):
             seq_len = np.random.randint(5, self.seq_len + 1)
 
-            # Pilih playbook dominan untuk sesi ini (simulasi APT campaign)
-            dominant_pb = random.choice(playbook_ids[1:])  # exclude normal
+            # Pilih playbook dominan berbobot dari distribusi BOTS
+            dominant_pb = random.choices(weighted_pbs, weights=weighted_vals, k=1)[0]
+            if dominant_pb == 0:  # exclude 'normal'
+                dominant_pb = random.choices(playbook_ids[1:])[0]
 
             hist_alerts   = np.random.choice(alert_type_ids, seq_len).tolist()
-            hist_playbook = [
-                dominant_pb if np.random.random() > 0.3
-                else random.choice(playbook_ids)
-                for _ in range(seq_len)
-            ]
-            hist_tactic = np.random.choice(tactic_ids, seq_len).tolist()
+            hist_tactic   = np.random.choice(tactic_ids, seq_len).tolist()
             hist_severity = np.random.randint(1, 6, seq_len).tolist()
-            target_playbook = dominant_pb
+
+            # ---------------------------------------------------------------
+            # Tiga tipe sequence untuk menghindari trivial pattern
+            # yang cukup dijawab oleh argmax(Counter(history)):
+            # ---------------------------------------------------------------
+            seq_roll = np.random.random()
+
+            if seq_roll < 0.60:
+                # TIPE 1 — Standard (60%):
+                # dominant_pb muncul di 60% langkah.
+                hist_playbook = [
+                    dominant_pb if np.random.random() < 0.60
+                    else random.choice(playbook_ids)
+                    for _ in range(seq_len)
+                ]
+                target_playbook = dominant_pb
+
+            elif seq_roll < 0.80:
+                # TIPE 2 — Multi-Campaign (20%):
+                # Dua playbook bersaing: dominant 40%, secondary 30%, noise 30%.
+                secondary_pb = random.choice(
+                    [pb for pb in playbook_ids[1:] if pb != dominant_pb]
+                )
+                hist_playbook = []
+                for _ in range(seq_len):
+                    r = np.random.random()
+                    if r < 0.40:
+                        hist_playbook.append(dominant_pb)
+                    elif r < 0.70:
+                        hist_playbook.append(secondary_pb)
+                    else:
+                        hist_playbook.append(random.choice(playbook_ids))
+                target_playbook = dominant_pb
+
+            else:
+                # TIPE 3 — Phase-Shift (20%):
+                # Mensimulasikan serangan multi-stage: fase awal (dominant_pb)
+                # diikuti fase akhir (late_pb) yang berbeda.
+                # Target = playbook fase AKHIR — BUKAN yang paling sering
+                # di keseluruhan riwayat.
+                late_pb = random.choice(
+                    [pb for pb in playbook_ids[1:] if pb != dominant_pb]
+                )
+                early_len = max(1, int(seq_len * 0.6))
+                late_len  = seq_len - early_len
+
+                hist_early = [
+                    dominant_pb if np.random.random() < 0.70
+                    else random.choice(playbook_ids)
+                    for _ in range(early_len)
+                ]
+                hist_late = [
+                    late_pb if np.random.random() < 0.70
+                    else random.choice(playbook_ids)
+                    for _ in range(late_len)
+                ]
+                hist_playbook   = hist_early + hist_late
+                target_playbook = late_pb   # target = fase AKHIR, bukan dominant
 
             all_data.append({
                 "hist_alert_ids":    hist_alerts,
@@ -507,14 +694,44 @@ class SplunkBOTSLoader:
                 "seq_len":           seq_len,
             })
 
-        # Train/test split
+        # Train/test split (sequential split untuk menghindari data leakage)
         split_idx = int(len(all_data) * (1 - test_size))
         train_raw, test_raw = all_data[:split_idx], all_data[split_idx:]
 
-        return (
-            self._collate(train_raw, self.seq_len),
-            self._collate(test_raw,  self.seq_len)
+        # Simpan metadata provenance
+        self._generation_metadata = {
+            "n_sequences_generated": n_sequences,
+            "n_train":               len(train_raw),
+            "n_test":                len(test_raw),
+            "distribution_source":   dist_source,
+            "dominant_playbook_prior": {
+                PLAYBOOK_ID_MAP.get(k, str(k)): round(v, 4)
+                for k, v in zip(weighted_pbs, weighted_vals)
+            },
+            "sequence_composition": (
+                "60% standard (60% dominant) + "
+                "20% multi-campaign (40% dominant + 30% secondary) + "
+                "20% phase-shift (target=late_pb, tidak bisa dijawab majority vote)"
+            ),
+        }
+        logger.info(
+            f"  Sequences generated: {n_sequences} "
+            f"(train={len(train_raw)}, test={len(test_raw)})"
         )
+
+        generation_info = {
+            "dataset_type": "SYNTHETIC_SEQUENCES_DERIVED_FROM_BOTS",
+            **self._generation_metadata,
+        }
+
+        train_tensors = self._collate(train_raw, self.seq_len)
+        test_tensors  = self._collate(test_raw,  self.seq_len)
+
+        # Sertakan generation_info sebagai metadata non-tensor
+        train_tensors["generation_info"] = generation_info
+        test_tensors["generation_info"]  = generation_info
+
+        return train_tensors, test_tensors
 
     @staticmethod
     def _collate(data_list: List[Dict], max_seq_len: int) -> Dict:

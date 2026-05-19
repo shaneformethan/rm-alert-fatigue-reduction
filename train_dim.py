@@ -29,7 +29,7 @@ if str(ROOT) not in sys.path:
 
 from src.models.dim import DynamicInterestModel
 from src.data.dataset_loader import SplunkBOTSLoader, PLAYBOOK_ID_MAP
-from src.evaluation.metrics import RankingMetrics
+from src.evaluation.metrics import RankingMetrics, MajorityVoteBaseline
 
 logging.basicConfig(
     level=logging.INFO,
@@ -403,6 +403,29 @@ class DIMTrainer:
             logger.info(f"  Best NDCG@5: {self.best_ndcg:.4f}")
             logger.info(f"{'='*60}\n")
 
+        # ---------------------------------------------------------------
+        # Evaluasi akhir: bandingkan DIM vs MajorityVote baseline
+        # Membuktikan DIM belajar lebih dari frequency counting.
+        # ---------------------------------------------------------------
+        logger.info("\nRunning final baseline comparison...")
+        best_epoch_metrics = max(self.history, key=lambda x: x.get("ndcg@5", 0))
+        baseline = MajorityVoteBaseline()
+        baseline_metrics = baseline.evaluate(
+            test_data["hist_playbook_ids"],
+            test_data["target_playbook"].tolist(),
+            k_values=self.config["k_eval"],
+        )
+        logger.info("  DIM (best epoch) vs MajorityVote Baseline:")
+        for k in self.config["k_eval"]:
+            dim_hr   = best_epoch_metrics.get(f"hit_ratio@{k}", 0)
+            base_hr  = baseline_metrics.get(f"hit_ratio@{k}", 0)
+            dim_ndcg = best_epoch_metrics.get(f"ndcg@{k}", 0)
+            base_ndcg= baseline_metrics.get(f"ndcg@{k}", 0)
+            logger.info(
+                f"  K={k:2d} | HR: DIM={dim_hr:.4f} vs Base={base_hr:.4f} (gap={dim_hr-base_hr:+.4f}) "
+                f"| NDCG: DIM={dim_ndcg:.4f} vs Base={base_ndcg:.4f} (gap={dim_ndcg-base_ndcg:+.4f})"
+            )
+
         return self.history
 
     @staticmethod
@@ -425,4 +448,5 @@ if __name__ == "__main__":
     print("\n=== Final Evaluation (Best Checkpoint) ===")
     best = max(history, key=lambda x: x.get("ndcg@5", 0))
     for k, v in best.items():
-        print(f"  {k}: {v}")
+        if k not in ("train_loss", "epoch"):
+            print(f"  {k}: {v:.4f}")
