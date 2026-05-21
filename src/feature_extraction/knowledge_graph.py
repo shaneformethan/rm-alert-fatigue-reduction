@@ -1,6 +1,6 @@
 """
 =============================================================================
-Module 2.1 – Knowledge Graph Construction
+Module 2.1 - Knowledge Graph Construction
 =============================================================================
 Merepresentasikan entitas keamanan dalam format RDF directed triplet:
     (Subject, Predicate, Object)
@@ -49,7 +49,7 @@ class RDFTriplet:
 class MitreAttackOntology:
     """
     Loader skema MITRE ATT&CK dari file STIX JSON lokal.
-    Menyediakan mapping Technique ID → Tactic.
+    Menyediakan mapping Technique ID -> Tactic.
     """
 
     def __init__(self, stix_path: Optional[str] = None):
@@ -126,13 +126,13 @@ class ThreatKnowledgeGraph:
     Konstruksi dynamic knowledge graph berbasis RDF dari entitas NER.
 
     Relasi yang dikonstruksi:
-        ACTOR    → [uses]             → MALWARE / TOOL
-        MALWARE  → [exploits]         → CVE
-        MALWARE  → [communicatesWith] → IP_ADDRESS / DOMAIN
-        MALWARE  → [implements]       → MITRE_TECHNIQUE
-        TECHNIQUE → [partOf]          → TACTIC
-        CVE      → [enables]          → TECHNIQUE
-        MALWARE  → [hasHash]          → MD5_HASH / SHA256_HASH
+        ACTOR    -> [uses]             -> MALWARE / TOOL
+        MALWARE  -> [exploits]         -> CVE
+        MALWARE  -> [communicatesWith] -> IP_ADDRESS / DOMAIN
+        MALWARE  -> [implements]       -> MITRE_TECHNIQUE
+        TECHNIQUE -> [partOf]          -> TACTIC
+        CVE      -> [enables]          -> TECHNIQUE
+        MALWARE  -> [hasHash]          -> MD5_HASH / SHA256_HASH
     """
 
     def __init__(self, mitre_stix_path: Optional[str] = None):
@@ -180,7 +180,7 @@ class ThreatKnowledgeGraph:
             for d in domains:
                 new_triplets.append(self._add("MALWARE", m, "communicatesWith", "DOMAIN", d))
 
-        # MALWARE implements TECHNIQUE → TECHNIQUE partOf TACTIC
+        # MALWARE implements TECHNIQUE -> TECHNIQUE partOf TACTIC
         for m in malwares:
             for tech in techniques:
                 new_triplets.append(self._add("MALWARE", m, "implements", "TECHNIQUE", tech))

@@ -1,6 +1,6 @@
 """
 =============================================================================
-Module 2.1 – Feature Representation & Semantic Graph Construction
+Module 2.1 - Feature Representation & Semantic Graph Construction
 =============================================================================
 Mengekstraksi entitas keamanan dari threat intelligence teks tidak terstruktur
 menggunakan Named Entity Recognition (NER) dan Part-of-Speech (POS) Tagging
@@ -112,7 +112,7 @@ class ThreatIntelNERExtractor:
             )
             raise
 
-        # Mapping label spaCy → tipe entitas keamanan
+        # Mapping label spaCy -> tipe entitas keamanan
         self._spacy_to_security_type = {
             "ORG": "ACTOR",
             "PERSON": "ACTOR",
@@ -306,4 +306,4 @@ if __name__ == "__main__":
         print(f"  [{etype}]: {texts}")
     print("\n--- POS Tags (first 15 tokens) ---")
     for token, pos in result.pos_tags[:15]:
-        print(f"  {token!r:20s} → {pos}")
+        print(f"  {token!r:20s} -> {pos}")

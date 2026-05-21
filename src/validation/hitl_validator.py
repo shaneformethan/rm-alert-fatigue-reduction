@@ -1,6 +1,6 @@
 """
 =============================================================================
-Module 2.4 – Analyst Validation Layer & Continuous Learning
+Module 2.4 - Analyst Validation Layer & Continuous Learning
 =============================================================================
 Human-in-the-loop paradigma untuk eliminasi risiko blackbox automation.
 
@@ -222,7 +222,7 @@ class ContinuousLearningTrainer:
 
 class HITLValidator:
     """
-    Analyst Validation Layer — Human-in-the-Loop interface.
+    Analyst Validation Layer - Human-in-the-Loop interface.
 
     Alur kerja:
     1. DIM menghasilkan top-K rekomendasi playbook dengan probabilitas p
@@ -415,7 +415,7 @@ class HITLValidator:
             bar = "█" * int(rec.probability * 20)
             logger.info(
                 f"  #{rec.rank} [{bar:20s}] {rec.probability:.2%} "
-                f"— {rec.playbook_name}"
+                f"- {rec.playbook_name}"
             )
         logger.info(f"{'='*60}")
 

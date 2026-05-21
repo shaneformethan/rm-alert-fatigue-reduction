@@ -1,15 +1,15 @@
 """
 =============================================================================
-Module 2.3 – Dynamic Interest Modeling (DIM) Architecture
+Module 2.3 - Dynamic Interest Modeling (DIM) Architecture
 =============================================================================
 Arsitektur DIM memproses high-risk alerts sebagai sequential modality.
 
 Komponen:
-  1. Embedding Layer    : Diskrit features → Dense vector space
+  1. Embedding Layer    : Diskrit features -> Dense vector space
   2. Long-Term Module   : Transformer Encoder (scaled dot-product attention)
                           untuk preferensi strategi mitigasi jangka panjang
   3. Short-Term Module  : LSTM + Forget Gate untuk evolusi taktik serangan
-  4. MLP Fusion         : Gabungkan kedua representasi → p(match | playbook, alert)
+  4. MLP Fusion         : Gabungkan kedua representasi -> p(match | playbook, alert)
 
 Formulasi:
   Embedding   : e_i = W_e × x_i + b_e
@@ -60,7 +60,7 @@ class AlertPlaybookEmbedding(nn.Module):
         self.tactic_embed   = nn.Embedding(num_tactics     + 1, embed_dim, padding_idx=0)
         self.severity_embed = nn.Embedding(6,                   embed_dim, padding_idx=0)  # 0-5
 
-        # Fuse 4 modalities → embed_dim
+        # Fuse 4 modalities -> embed_dim
         self.fusion = nn.Linear(embed_dim * 4, embed_dim)
 
         # Positional encoding (sinusoidal)
@@ -140,7 +140,7 @@ class LongTermInterestModule(nn.Module):
             num_layers=num_layers,
             enable_nested_tensor=False,
         )
-        self.pool = nn.AdaptiveAvgPool1d(1)  # global average pooling → [B, D]
+        self.pool = nn.AdaptiveAvgPool1d(1)  # global average pooling -> [B, D]
 
     def forward(
         self,
@@ -214,7 +214,7 @@ class ShortTermInterestModule(nn.Module):
 
 
 # ===========================================================================
-# Sub-module 4: MLP Fusion → Output Probability
+# Sub-module 4: MLP Fusion -> Output Probability
 # ===========================================================================
 
 class MLPFusion(nn.Module):
@@ -253,7 +253,7 @@ class MLPFusion(nn.Module):
         h_lt:   torch.Tensor,   # [B, lt_dim]
         h_st:   torch.Tensor,   # [B, st_dim]
         e_cand: torch.Tensor,   # [B, cand_dim]
-    ) -> torch.Tensor:           # [B] — probabilities
+    ) -> torch.Tensor:           # [B] - probabilities
         x = torch.cat([h_lt, h_st, e_cand], dim=-1)
         return torch.sigmoid(self.net(x)).squeeze(-1)
 
@@ -264,14 +264,14 @@ class MLPFusion(nn.Module):
 
 class DynamicInterestModel(nn.Module):
     """
-    Dynamic Interest Modeling (DIM) — Arsitektur lengkap.
+    Dynamic Interest Modeling (DIM) - Arsitektur lengkap.
 
     Input:
         - Sekuensi historis interaksi playbook H = {x_1, ..., x_{t-1}}
         - Kandidat playbook saat ini t
 
     Pipeline:
-        H → Embedding → [Long-Term (Transformer) | Short-Term (LSTM)] → MLP → p
+        H -> Embedding -> [Long-Term (Transformer) | Short-Term (LSTM)] -> MLP -> p
 
     Output:
         p ∈ (0,1): probabilitas kecocokan playbook kandidat dengan alert aktif
@@ -378,7 +378,7 @@ class DynamicInterestModel(nn.Module):
         # 4) Candidate embedding
         e_cand = self.candidate_embed(cand_playbook_id)  # [B, D]
 
-        # 5) MLP Fusion → probability
+        # 5) MLP Fusion -> probability
         p = self.fusion(h_lt, h_st, e_cand)  # [B]
         return p
 
@@ -396,7 +396,7 @@ class DynamicInterestModel(nn.Module):
         Prediksi top-K playbook terbaik untuk alert saat ini.
 
         Returns:
-            (top_k_indices, top_k_scores) — keduanya [B, K]
+            (top_k_indices, top_k_scores) - keduanya [B, K]
         """
         self.eval()
         B = hist_alert_ids.size(0)

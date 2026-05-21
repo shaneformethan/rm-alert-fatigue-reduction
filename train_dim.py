@@ -1,11 +1,10 @@
 """
-=============================================================================
-Training Script – Dynamic Interest Model (DIM)
-=============================================================================
-Melatih DIM menggunakan dataset Splunk BOTS v3 (sekuensi playbook historis)
-dengan evaluasi menggunakan ranking metrics (HR, MAP, NDCG).
-=============================================================================
+Training Script - Dynamic Interest Model (DIM)
+
+Train DIM using Splunk BOTS v3 synthetic sequences with
+ranking evaluation metrics (HR, MAP, NDCG).
 """
+
 
 import os
 import sys
@@ -33,10 +32,11 @@ from src.evaluation.metrics import RankingMetrics, MajorityVoteBaseline
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("logs/dim_training.log", mode="a"),
+        logging.FileHandler("logs/dim_training.log", mode="a", encoding="utf-8"),
+
     ],
 )
 logger = logging.getLogger("DIMTrainer")
@@ -320,7 +320,7 @@ class DIMTrainer:
         torch.save(ckpt, path / f"dim_epoch_{epoch:03d}.pt")
         if is_best:
             torch.save(ckpt, path / "dim_best.pt")
-            logger.info(f"  → Best model saved (NDCG@5={metrics.get('ndcg@5', 0):.4f})")
+            logger.info(f"  [best] NDCG@5={metrics.get('ndcg@5', 0):.4f} - checkpoint saved")
 
     def _check_early_stopping(self, ndcg5: float) -> bool:
         """
@@ -389,7 +389,7 @@ class DIMTrainer:
             if self._check_early_stopping(ndcg5):
                 logger.info(
                     f"\n{'='*60}\n"
-                    f"  ⏹ Early stopping triggered at epoch {epoch}\n"
+                    f"  Early stopping triggered at epoch {epoch}\n"
                     f"  Best NDCG@5: {self.best_ndcg:.4f} (epoch {epoch - self._es_patience})\n"
                     f"  Checkpoint  : {self.config['checkpoint_dir']}/dim_best.pt\n"
                     f"{'='*60}\n"
@@ -445,8 +445,57 @@ if __name__ == "__main__":
     history = trainer.train()
 
     # Cetak hasil akhir
-    print("\n=== Final Evaluation (Best Checkpoint) ===")
+    print("\n" + "="*70)
+    print("  FINAL EVALUATION - DIM vs MAJORITY VOTE BASELINE")
+    print("="*70)
     best = max(history, key=lambda x: x.get("ndcg@5", 0))
+    
+    print("\n[DIM Model] Best Epoch Results:")
     for k, v in best.items():
         if k not in ("train_loss", "epoch"):
             print(f"  {k}: {v:.4f}")
+    
+    # ========================================================================
+    # TAMBAHAN: Evaluasi Majority Vote Baseline untuk anti-trivial validation
+    # ========================================================================
+    print("\n[Majority Vote Baseline] Evaluation:")
+    print("  (Simple argmax(Counter(history)) - tidak ada learning)\n")
+    
+    _, test_data, train_data = trainer.load_data()
+    baseline = MajorityVoteBaseline()
+    baseline_metrics = baseline.evaluate(
+        hist_playbook_ids=test_data["hist_playbook_ids"],
+        ground_truths=test_data["target_playbook"].tolist(),
+        k_values=CONFIG["k_eval"],
+    )
+    
+    for k, v in baseline_metrics.items():
+        print(f"  {k}: {v:.4f}")
+    
+    # ========================================================================
+    # Perbandingan: DIM vs Baseline
+    # ========================================================================
+    print("\n" + "="*70)
+    print("  COMPARISON TABLE: DIM vs Majority Vote Baseline")
+    print("="*70)
+    print(f"{'Metric':<20} {'DIM':<15} {'Baseline':<15} {'Gap':<10}")
+    print("-"*70)
+    
+    for k in CONFIG["k_eval"]:
+        dim_hr    = best.get(f"hit_ratio@{k}", 0.0)
+        base_hr   = baseline_metrics.get(f"hit_ratio@{k}", 0.0)
+        gap_hr    = dim_hr - base_hr
+        
+        dim_ndcg  = best.get(f"ndcg@{k}", 0.0)
+        base_ndcg = baseline_metrics.get(f"ndcg@{k}", 0.0)
+        gap_ndcg  = dim_ndcg - base_ndcg
+        
+        print(f"HR@{k:<18} {dim_hr:.4f}          {base_hr:.4f}          {gap_hr:+.4f}")
+        print(f"NDCG@{k:<16} {dim_ndcg:.4f}          {base_ndcg:.4f}          {gap_ndcg:+.4f}")
+
+    print("=" * 70)
+    print("  Note: Evaluation on synthetic sequences derived from BOTS eventcode distribution.")
+    print("  Sequences include 40% phase-shift (multi-stage attack simulation),")
+    print("  20% multi-campaign, and 40% standard patterns (signal_ratio=0.70).")
+    print("=" * 70)
+

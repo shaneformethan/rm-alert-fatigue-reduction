@@ -1,6 +1,6 @@
 """
 =============================================================================
-Module 2.5 – Evaluation Metrics
+Module 2.5 - Evaluation Metrics
 =============================================================================
 Evaluasi dua ranah performa:
 
@@ -150,8 +150,8 @@ class RankingMetrics:
         - NDCG @ K       : Normalized Discounted Cumulative Gain
 
     Format input:
-        recommendations: List[List[int]] — top-K playbook ID per query
-        ground_truths:   List[int]        — playbook ID yang benar per query
+        recommendations: List[List[int]] - top-K playbook ID per query
+        ground_truths:   List[int]        - playbook ID yang benar per query
     """
 
     def compute_all(
@@ -293,7 +293,7 @@ class MajorityVoteBaseline:
 
     Secara khusus, pada Phase-Shift sequences (20% dataset), baseline ini
     selalu salah karena target = late_pb yang muncul lebih sedikit secara
-    keseluruhan — hanya sequential model (LSTM) yang bisa menjawab dengan benar.
+    keseluruhan - hanya sequential model (LSTM) yang bisa menjawab dengan benar.
     """
 
     def predict_top_k(
@@ -309,7 +309,7 @@ class MajorityVoteBaseline:
             k: Jumlah rekomendasi
 
         Returns:
-            List of List[int] — top-K playbook per query
+            List of List[int] - top-K playbook per query
         """
         from collections import Counter
         recommendations = []
@@ -379,8 +379,8 @@ class IncidentRecord:
     Rekaman satu insiden untuk pengukuran efisiensi operasional SOC.
 
     Field waktu:
-        detection_start/end : Durasi komputasi TF-IDF filter hingga alert ditetapkan → MTTD
-        response_start/end  : Durasi DIM inference hingga playbook disetujui analis → MTTR
+        detection_start/end : Durasi komputasi TF-IDF filter hingga alert ditetapkan -> MTTD
+        response_start/end  : Durasi DIM inference hingga playbook disetujui analis -> MTTR
 
     Field otomasi:
         manual_actions_automated : Jumlah langkah manual yang diotomasi sistem.
@@ -401,15 +401,15 @@ class IncidentRecord:
 class SOCOperationalMetrics:
     """
     Metrik efisiensi operasional SOC:
-        - MTTD (Mean Time To Detect)       → bandingkan vs MTTD manual dan [10]
-        - MTTR (Mean Time To Respond)       → bandingkan vs MTTR manual dan [13][14]
-        - Analyst Workload Reduction (%)    → % langkah manual yang diotomasi
-        - MTTD Reduction (%) vs baseline    → improvement terhadap SOC manual
-        - MTTR Reduction (%) vs baseline    → improvement terhadap SOC manual
+        - MTTD (Mean Time To Detect)       -> bandingkan vs MTTD manual dan [10]
+        - MTTR (Mean Time To Respond)       -> bandingkan vs MTTR manual dan [13][14]
+        - Analyst Workload Reduction (%)    -> % langkah manual yang diotomasi
+        - MTTD Reduction (%) vs baseline    -> improvement terhadap SOC manual
+        - MTTR Reduction (%) vs baseline    -> improvement terhadap SOC manual
 
     Baseline Reference (dari literatur SOC):
-        MTTD baseline  ≈ 180s  (3 menit — investigasi manual awal per alert)
-        MTTR baseline  ≈ 480s  (8 menit — triage + response manual sederhana)
+        MTTD baseline  ~ 180s  (3 menit - investigasi manual awal per alert)
+        MTTR baseline  ~ 480s  (8 menit - triage + response manual sederhana)
         Sumber: IBM Cost of a Data Breach Report; Palo Alto Unit 42 Incident Response Report.
 
     Pembanding Existing Methods:
@@ -671,7 +671,7 @@ if __name__ == "__main__":
     ]
     ground_truths = np.random.randint(1, num_playbooks+1, n_queries).tolist()
 
-    # SOC incidents — simulasi sistem yang mengotomasi 80-100% langkah manual
+    # SOC incidents - simulasi sistem yang mengotomasi 80-100% langkah manual
     # Justifikasi: sistem mengotomasi NER, KG, TF-IDF, DIM, scoring, SOAR execution.
     # Hanya satu langkah yang tetap manual: HITL Confirm/Reject akhir.
     incidents = []
@@ -680,9 +680,9 @@ if __name__ == "__main__":
         incidents.append(IncidentRecord(
             incident_id=f"INC-{i:04d}",
             detection_start=t0,
-            detection_end=t0 + np.random.uniform(0.1, 3.0),    # MTTD: 0.1–3s (TF-IDF komputasi)
+            detection_end=t0 + np.random.uniform(0.1, 3.0),    # MTTD: 0.1-3s (TF-IDF komputasi)
             response_start=t0 + np.random.uniform(3, 8),
-            response_end=t0 + np.random.uniform(8, 35),         # MTTR: 8–35s (DIM+HITL)
+            response_end=t0 + np.random.uniform(8, 35),         # MTTR: 8-35s (DIM+HITL)
             manual_actions_automated=np.random.randint(8, 11),  # 8-10 dari 10 diotomasi
             manual_actions_total=10,
         ))

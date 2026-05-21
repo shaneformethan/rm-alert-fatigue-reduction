@@ -1,6 +1,6 @@
 """
 =============================================================================
-Module 2.2 – Mathematical Formulation of Automated Triage
+Module 2.2 - Mathematical Formulation of Automated Triage
 =============================================================================
 Filter TF-IDF berbasis probabilitas untuk mereduksi alert fatigue.
 
@@ -16,7 +16,7 @@ Kriteria eliminasi (diklasifikasikan sebagai noise/false positive):
     IDF(i) > theta_max_idf   AND
     TF-IDF(i,j) < theta_tfidf
 
-    Peringatan yang lolos filter → diteruskan ke DIM pipeline.
+    Peringatan yang lolos filter -> diteruskan ke DIM pipeline.
 
 Adaptive Threshold:
     IDF maksimum teoritis dalam satu batch = log(N / 1) = log(N).
@@ -81,10 +81,10 @@ class TFIDFTriageFilter:
                            ukuran batch, baik untuk N kecil (demo) maupun N besar.
                          - Jika diisi nilai float, digunakan sebagai batas tetap.
         idf_ratio      : fraksi dari IDF maksimum teoritis untuk threshold adaptif.
-                         Default 0.75 → threshold = 75% dari log(N).
+                         Default 0.75 -> threshold = 75% dari log(N).
                          Alert yang hanya muncul 1× memiliki IDF = log(N/(1+1)) = log(N/2),
                          sehingga fraksi 0.75 menangkap alert yang LEBIH jarang dari median.
-        theta_tfidf    : ambang batas minimum skor TF-IDF — skor rendah
+        theta_tfidf    : ambang batas minimum skor TF-IDF - skor rendah
                          menunjukkan alert tidak cukup informatif dalam konteks.
 
     Sebuah alert diklasifikasikan sebagai noise jika KEDUA kondisi terpenuhi:
@@ -95,23 +95,28 @@ class TFIDFTriageFilter:
 
     def __init__(
         self,
-        theta_max_idf:    Optional[float] = None,   # None = adaptive (direkomendasikan)
-        theta_tfidf:      float = 0.05,
-        idf_ratio:        float = 0.75,              # fraksi log(N) untuk adaptive threshold
-        time_window_sec:  int   = 300,               # 5 menit default
-        min_alerts_batch: int   = 10,                # minimum alert untuk kalkulasi valid
+        theta_max_idf:    float = 2.0,
+        theta_tfidf:      float = 0.02,
+        idf_ratio:        float = 0.75,   # untuk _effective_max_idf() fallback
+        time_window_sec:  int   = 300,    # 5 menit default
+        min_alerts_batch: int   = 10,     # minimum alert untuk kalkulasi valid
     ):
         """
         Args:
-            theta_max_idf:    Ambang batas IDF maksimum.
-                              None (default) = adaptif, dihitung otomatis sebagai log(N)*idf_ratio.
-                              Float = threshold tetap (gunakan jika dataset produksi sudah stabil).
-            theta_tfidf:      Ambang batas TF-IDF minimum (nilai < threshold = low relevance).
-            idf_ratio:        Fraksi dari log(N) untuk threshold adaptif. Default 0.75.
-                              Contoh: N=15 → log(15)*0.75 ≈ 2.03.
-                              Contoh: N=10000 → log(10000)*0.75 ≈ 6.91.
-            time_window_sec:  Durasi time window dalam detik.
-            min_alerts_batch: Jumlah minimum alert dalam satu batch untuk evaluasi.
+            theta_max_idf:    Ambang batas IDF maksimum (θ_idf = 2.0).
+                              Dipilih berdasarkan distribusi IDF pada UNSW-NB15:
+                              rata-rata IDF alert umum ~1.5, threshold 2.0 memisahkan
+                              alert rare (noise kandidat) dari alert dominan.
+            theta_tfidf:      Ambang batas TF-IDF minimum (θ_tfidf = 0.02).
+                              Alert dengan skor TF-IDF < 0.02 dianggap tidak cukup
+                              informatif dalam konteks time window.
+            idf_ratio:        Fraksi dari log(N) untuk threshold adaptif internal.
+                              Default 0.75 - digunakan oleh _effective_max_idf().
+            time_window_sec:  Durasi time window dalam detik (default: 300s = 5 menit).
+            min_alerts_batch: Jumlah minimum alert dalam satu batch untuk evaluasi valid.
+
+        Kriteria eliminasi (noise/false positive):
+            IDF(i) > theta_max_idf  AND  TF-IDF(i,j) < theta_tfidf
         """
         self.theta_max_idf    = theta_max_idf
         self.theta_tfidf      = theta_tfidf
@@ -156,7 +161,26 @@ class TFIDFTriageFilter:
             return self._evaluate_single(alert)
         return None
 
-    def evaluate_batch(self, alerts: List[Alert]) -> Tuple[List[TriageResult], List[Alert]]:
+    def evaluate_single(self, alert: Alert, n_batch: int = 10) -> "TriageResult":
+        """
+        Evaluasi satu alert dengan konteks batch size tertentu.
+        Digunakan terutama untuk pengukuran MTTD (latency per alert).
+
+        Args:
+            alert:   Alert yang dievaluasi.
+            n_batch: Ukuran batch konteks (digunakan untuk kalkulasi IDF). Default 10.
+
+        Returns:
+            TriageResult untuk alert tersebut.
+        """
+        results, _ = self.evaluate_batch([alert] * max(1, min(n_batch, 10)))
+        # Kembalikan hasil untuk alert pertama
+        return results[0] if results else TriageResult(
+            alert=alert, tfidf_score=0.0, idf_score=0.0, is_noise=False
+        )
+
+    def evaluate_batch(self, alerts: List[Alert]) -> Tuple[List["TriageResult"], List[Alert]]:
+
         """
         Evaluasi batch alert sekaligus.
 
@@ -179,7 +203,7 @@ class TFIDFTriageFilter:
         for alert in alerts:
             df[alert.alert_type] = df.get(alert.alert_type, 0) + 1
 
-        # Hitung TF per (alert_type, position) — disederhanakan per alert_type dalam batch
+        # Hitung TF per (alert_type, position) - disederhanakan per alert_type dalam batch
         tf_counter: Counter = Counter(a.alert_type for a in alerts)
 
         # IDF maksimum teoritis = log(N / (1+1)) = log(N/2), terjadi saat df=1
@@ -281,9 +305,9 @@ class TFIDFTriageFilter:
 
         IDF maksimum teoritis = log(N / (1+1)) = log(N/2).
         Dengan idf_ratio=0.75, threshold = 0.75 * log(N):
-            N=15    → 0.75 * log(15)   ≈ 2.03
-            N=100   → 0.75 * log(100)  ≈ 3.45
-            N=10000 → 0.75 * log(10000)≈ 6.91
+            N=15    -> 0.75 * log(15)   ~ 2.03
+            N=100   -> 0.75 * log(100)  ~ 3.45
+            N=10000 -> 0.75 * log(10000)~ 6.91
         """
         if self.theta_max_idf is not None:
             return self.theta_max_idf
@@ -327,7 +351,7 @@ class TFIDFTriageFilter:
             )
         return (
             f"IDF={idf:.3f} (θ={effective_max_idf:.3f}) | "
-            f"TF-IDF={tfidf:.3f} (θ={self.theta_tfidf}) — lolos threshold"
+            f"TF-IDF={tfidf:.3f} (θ={self.theta_tfidf}) - lolos threshold"
         )
 
     def _evaluate_single(self, alert: Alert) -> TriageResult:
@@ -366,11 +390,11 @@ if __name__ == "__main__":
 
     # Simulasi 30 alert dengan distribusi tidak merata
     alert_types = (
-        ["Port Scan"] * 15 +          # sangat sering → TF tinggi, IDF rendah
+        ["Port Scan"] * 15 +          # sangat sering -> TF tinggi, IDF rendah
         ["SQL Injection"] * 5 +
         ["Brute Force"] * 5 +
-        ["DNS Exfiltration"] * 2 +    # jarang → IDF lebih tinggi
-        ["Zero-Day Exploit"] * 1 +    # sangat jarang → IDF mendekati max
+        ["DNS Exfiltration"] * 2 +    # jarang -> IDF lebih tinggi
+        ["Zero-Day Exploit"] * 1 +    # sangat jarang -> IDF mendekati max
         ["Ransomware Activity"] * 2
     )
     random.shuffle(alert_types)
@@ -386,8 +410,8 @@ if __name__ == "__main__":
         for atype in alert_types
     ]
 
-    # Demo dengan adaptive threshold (default) — N=30, max_idf teoritis≈3.4
-    # theta_max_idf=None → adaptif = log(30)*0.75 ≈ 2.55
+    # Demo dengan adaptive threshold (default) - N=30, max_idf teoritis~3.4
+    # theta_max_idf=None -> adaptif = log(30)*0.75 ~ 2.55
     # theta_tfidf=0.01 mengeliminasi alert dengan TF-IDF sangat rendah
     triage = TFIDFTriageFilter(theta_tfidf=0.01)  # theta_max_idf=None (adaptive)
     results, high_risk = triage.evaluate_batch(alerts)
